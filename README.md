@@ -58,6 +58,36 @@ python3 --version
 pip3 --version
 ```
 
+#### Google Chrome / Chromium
+- **Chrome/Chromium**: Необхідний для створення скріншотів дашборду
+- Quarto використовує headless Chrome для рендерингу HTML дашборду в PNG зображення
+
+Встановлення Chrome:
+- **macOS**:
+  ```bash
+  brew install --cask google-chrome
+  # або
+  brew install chromium
+  ```
+- **Ubuntu/Debian**:
+  ```bash
+  # Google Chrome
+  wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+  sudo apt install ./google-chrome-stable_current_amd64.deb
+
+  # або Chromium
+  sudo apt-get install chromium-browser
+  ```
+- **Windows**: Завантажити з [google.com/chrome](https://www.google.com/chrome/)
+
+Перевірка встановлення:
+```bash
+# Google Chrome
+google-chrome --version
+# або Chromium
+chromium-browser --version
+```
+
 ### 2. R Packages
 
 Необхідні бібліотеки R:
@@ -214,6 +244,8 @@ quarto render Dashboard_generator.qmd
 source("dashboard_static.R")
 ```
 
+**📸 Примітка про скріншоти**: Quarto використовує Google Chrome/Chromium у headless режимі для конвертації HTML дашборду в PNG зображення. Переконайтеся, що Chrome встановлений перед запуском генерації.
+
 Згенеровані зображення зберігаються у папці `images/` з міткою дати.
 
 ### Відправка в Slack
@@ -317,6 +349,31 @@ install.packages("package_name", repos = "https://cran.rstudio.com/")
 # Або оновити всі пакети
 update.packages(ask = FALSE)
 ```
+
+### Проблема: "Chrome not found" або дашборд не генерується в PNG
+
+**Рішення**:
+- Переконайтеся, що Chrome/Chromium встановлений:
+  ```bash
+  google-chrome --version
+  # або
+  chromium-browser --version
+  ```
+- Якщо Chrome встановлений, але Quarto його не знаходить, вкажіть шлях явно:
+  ```bash
+  # Linux
+  export CHROME_BIN=/usr/bin/google-chrome
+  # або
+  export CHROME_BIN=/usr/bin/chromium-browser
+
+  # macOS
+  export CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  ```
+- Перезапустіть термінал після встановлення Chrome
+- Для headless режиму може знадобитися додаткові залежності (Linux):
+  ```bash
+  sudo apt-get install -y libxss1 libappindicator1 libindicator7
+  ```
 
 ---
 
