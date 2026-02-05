@@ -1,19 +1,46 @@
-# ===============================================
-# SUPPLY DASHBOARD - CONFIGURABLE VERSION
-# ===============================================
-# 1. Load your data: long_data <- read.csv('your_file.csv')
-# 2. Configure settings below
-# 3. Run: source("dashboard_config.R")
+---
+title: "Dashboard"
+format: html
+---
+
+```{r}
+#| label: load_libraries
+#| echo: false
+#| warning: false
 
 library(shiny)
 library(ggplot2)
-library(dplyr)
 library(scales)
-library(tidyr)
+library(tidyverse)
+```
 
-# ===============================================
-# ⚙️ SETTINGS BLOCK - CONFIGURE HERE
-# ===============================================
+```{r}
+#| label: load&transform_data
+#| warning: false
+#| 
+url <- "https://docs.google.com/spreadsheets/d/1DWcT_Qs3a71Um4I--zvMtkl1CnVuHmW05JlYs-WwS8c/edit?gid=0#gid=0"
+data <- googlesheets4::read_sheet(url, col_types = "c")
+
+long_data <- data %>% 
+  select(-Owner) %>% 
+  select(where(~!all(is.na(.)))) %>%
+  rename(metric_name = "Metrics/ Date") %>%
+  rename(target_raw = Target) %>% 
+  pivot_longer(
+    cols = -c(metric_name, target_raw),
+    names_to = "date",  
+    values_to = "value_raw" 
+  ) %>%
+  mutate(
+    value_raw = str_replace(value_raw, ",", "."),
+    target_num = parse_number(target_raw),
+    value_num = parse_number(value_raw)
+  ) %>% 
+  select(-target_raw)
+```
+
+```{r}
+#| label: setting_block
 
 # --- Time Period Settings ---
 # How many months of history to show on charts
@@ -117,11 +144,10 @@ BLOCK4_METRICS <- list(
 
 # --- Display Settings ---
 SHOW_GLOW_EFFECTS <- TRUE  # Set to FALSE to disable glow effects
+```
 
-
-# ===============================================
-# DATA CHECK & PREPARATION
-# ===============================================
+```{r}
+#| label: data_check&preparation
 
 if(!exists("long_data")) {
   stop("Variable 'long_data' not found!\n",
@@ -148,11 +174,10 @@ chart_data <- long_data %>% filter(date >= cutoff_date)
 
 # Get latest date for "Last update"
 last_data_date <- max(long_data$date, na.rm = TRUE)
+```
 
-
-# ===============================================
-# HELPER FUNCTIONS
-# ===============================================
+```{r}
+#| label: helper_functions
 
 # Calculate change between last two periods
 calculate_change <- function(data, metric) {
@@ -266,11 +291,10 @@ get_chart_glow_class <- function(data, metrics, is_higher_good = TRUE) {
   
   get_multi_glow_class(values, targets, is_higher_good)
 }
+```
 
-
-# ===============================================
-# UNIVERSAL CHART FUNCTIONS
-# ===============================================
+```{r}
+#| label: universal_chart_functions
 
 # Line chart (single or multiple metrics)
 create_line_chart <- function(data, metrics, title, show_area = FALSE, 
@@ -467,11 +491,10 @@ create_bar_chart <- function(data, metrics, title) {
   
   return(p)
 }
+```
 
-
-# ===============================================
-# KPI CARD GENERATORS
-# ===============================================
+```{r}
+#| label: kpi_card_generator
 
 create_kpi_card <- function(metric_name, data, is_higher_good = TRUE, show_target = TRUE) {
   
@@ -557,11 +580,10 @@ create_kpi_card_large <- function(metric_name, data, is_higher_good = TRUE) {
       }
   )
 }
+```
 
-
-# ===============================================
-# NDA/AI VIOLATIONS PARSER
-# ===============================================
+```{r}
+#| label: nda/ai_violation_parser
 
 parse_nda_violations <- function(data) {
   nda_data <- data %>%
@@ -595,11 +617,10 @@ parse_nda_violations <- function(data) {
   
   return(result)
 }
+```
 
-
-# ===============================================
-# SHINY UI
-# ===============================================
+```{r}
+#| label: shiny_ui
 
 ui <- fluidPage(
   
@@ -734,11 +755,10 @@ ui <- fluidPage(
     )
   }
 )
+```
 
-
-# ===============================================
-# SHINY SERVER
-# ===============================================
+```{r}
+#| label: shiny_server
 
 server <- function(input, output, session) {
   
@@ -770,11 +790,10 @@ server <- function(input, output, session) {
                      "Communication Metrics")
   }, res = 96)
 }
+```
 
-
-# ===============================================
-# IMAGE GENERATION (webshot2)
-# ===============================================
+```{r}
+#| label: image_generator
 
 generate_dashboard_image <- function(output_dir = "images", filename = NULL, delay = 3) {
   
@@ -817,11 +836,10 @@ generate_dashboard_image <- function(output_dir = "images", filename = NULL, del
   cat("✓ Dashboard image saved to:", filepath, "\n")
   return(filepath)
 }
+```
 
-
-# ===============================================
-# LAUNCH
-# ===============================================
+```{r}
+#| label: launch
 
 cat("\n")
 cat("==============================================\n")
@@ -838,3 +856,57 @@ cat("To stop, press ESC or Stop\n")
 cat("==============================================\n\n")
 
 shinyApp(ui = ui, server = server)
+```
+
+
+## Sending this dashboard to Slack server
+
+```{r setup, include=FALSE}
+reticulate::use_virtualenv("./Dashboard", required = TRUE)
+```
+
+```{python}
+import os
+import glob 
+from dotenv import load_dotenv
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+load_dotenv()
+
+token = os.getenv("SLACK_BOT_TOKEN")
+channel_id = os.getenv("CHANNEL_ID")
+
+image_folder = "images"
+
+search_pattern = os.path.join(image_folder, "*.png") 
+list_of_files = glob.glob(search_pattern) 
+
+if not list_of_files:
+    print(f"Помилка: У папці '{image_folder}' не знайдено жодного PNG файлу!")
+    exit()
+    
+latest_file = max(list_of_files, key=os.path.getmtime)
+
+print(f"✅ Знайдено найновіше зображення: {latest_file}")
+
+if not token:
+    print("Помилка: Токен не знайдено.")
+else:
+    client = WebClient(token=token)
+
+try:
+    response = client.files_upload_v2(
+        channel=channel_id,
+        file=latest_file, 
+        title="Свіжий звіт",
+        initial_comment=f"Ось найактуальніший дашборд ({os.path.basename(latest_file)})"
+    )
+    print("Зображення успішно надіслано!")
+
+except SlackApiError as e:
+    print(f"Error uploading file: {e.response['error']}")
+except FileNotFoundError:
+    print(f"Файл {latest_file} кудись зник під час роботи скрипта.")
+```
+
