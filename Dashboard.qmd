@@ -41,6 +41,7 @@ long_data <- data %>%
   print() %>% 
   view()
 ```
+
 ```{r}
 # Функція малювання (шаблон)
 draw_card_base <- function(title, value, target, prev_value, suffix = "", invert = FALSE) {
@@ -95,6 +96,7 @@ draw_card_base <- function(title, value, target, prev_value, suffix = "", invert
     theme(plot.margin = margin(2, 2, 2, 2))
 }
 ```
+
 ```{r}
 # ==============================================================================
 # НАЛАШТУВАННЯ: Які метрики ти хочеш бачити в шапці?
@@ -160,6 +162,7 @@ dashboard_header <- wrap_plots(plots_list, nrow = 1)
 # Виводимо результат
 dashboard_header
 ```
+
 ```{r}
 
 # ==============================================================================
@@ -293,6 +296,7 @@ final_dashboard <- header_plot /
 # Малюємо
 final_dashboard
 ```
+
 ```{r}
 # ==============================================================================
 # ЧАСТИНА 1: ФУНКЦІЇ МАЛЮВАННЯ (Двигун)
@@ -467,4 +471,3 @@ final_dashboard <- blk_header /
 # 4. Вивід
 final_dashboard
 ```
-
