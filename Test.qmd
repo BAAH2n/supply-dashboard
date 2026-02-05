@@ -1,0 +1,182 @@
+---
+title: "Test"
+format: html
+editor: visual
+---
+
+```{r}
+# ===============================================
+# ТЕСТОВА ВЕРСІЯ - ПЕРЕВІРКА ДАНИХ
+# ===============================================
+
+cat("\n==============================================\n")
+cat("ДІАГНОСТИКА ДАНИХ\n")
+cat("==============================================\n\n")
+
+# 1. Перевірка наявності long_data
+if(!exists("long_data")) {
+  stop("❌ ПОМИЛКА: Змінна 'long_data' не знайдена!\n",
+       "Завантаж дані першими:\n",
+       "  long_data <- read.csv('твій_файл.csv')\n")
+}
+
+cat("✓ Дані знайдено\n")
+cat("  Розмір:", nrow(long_data), "рядків\n\n")
+
+# 2. Перевірка структури
+cat("Структура даних:\n")
+str(long_data)
+cat("\n")
+
+# 3. Перевірка колонок
+cat("Колонки:\n")
+print(names(long_data))
+cat("\n")
+
+# 4. Перегляд перших рядків
+cat("Перші 5 рядків:\n")
+print(head(long_data, 5))
+cat("\n")
+
+# 5. Перевірка типу дати
+cat("Тип колонки date:\n")
+print(class(long_data$date))
+cat("\n")
+
+# 6. Унікальні дати
+cat("Унікальні дати:\n")
+print(unique(long_data$date))
+cat("\n")
+
+# 7. Перевірка метрик
+cat("Унікальні метрики:\n")
+print(unique(long_data$metric_name))
+cat("\n")
+
+cat("==============================================\n")
+cat("Якщо все виглядає добре, запусти:\n")
+cat("  source('dashboard_interactive.R')\n")
+cat("==============================================\n")
+```
+```{r}
+# ===============================================
+# МІНІМАЛЬНИЙ DASHBOARD ДЛЯ ШВИДКОГО ТЕСТУ
+# ===============================================
+
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+
+# Перевірка даних
+if(!exists("long_data")) {
+  stop("Завантаж long_data першою!")
+}
+
+# Конвертація дати (без попереджень)
+suppressWarnings({
+  if(!inherits(long_data$date, "Date")) {
+    current_year <- format(Sys.Date(), "%Y")
+    long_data$date <- as.Date(paste0(long_data$date, "-", current_year), 
+                               format = "%d-%b-%Y")
+  }
+})
+
+# Функція для розрахунку змін
+calc_change <- function(data, metric) {
+  d <- data %>% filter(metric_name == metric) %>% arrange(date)
+  if(nrow(d) < 2) return(list(current = NA, change = NA))
+  
+  curr <- tail(d$value_num, 1)
+  prev <- d$value_num[nrow(d) - 1]
+  chg <- ifelse(!is.na(curr) && !is.na(prev), curr - prev, NA)
+  chg_pct <- ifelse(!is.na(chg) && prev != 0, (chg / prev) * 100, NA)
+  
+  list(current = curr, change = chg, change_pct = chg_pct)
+}
+
+# Розрахунок метрик
+avail_avg <- calc_change(long_data, "Availability Average")
+avail_low <- calc_change(long_data, "Availability Lowest")
+compl <- calc_change(long_data, "%Completion")
+pu_ret <- calc_change(long_data, "PU Retention")
+
+# UI
+ui <- fluidPage(
+  tags$head(tags$style(HTML("
+    body { background: #f8f9fa; padding: 20px; }
+    .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; 
+              padding: 30px; border-radius: 12px; margin-bottom: 20px; }
+    .kpi-box { background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; 
+               box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; }
+    .kpi-value { font-size: 36px; font-weight: 700; margin: 10px 0; }
+    .kpi-label { font-size: 12px; color: #6c757d; font-weight: 600; text-transform: uppercase; }
+  "))),
+  
+  div(class = "header",
+      h1("Supply Metrics Dashboard", style = "margin: 0;"),
+      p(format(Sys.Date(), "%d.%m.%Y"), style = "margin: 10px 0 0 0;")
+  ),
+  
+  fluidRow(
+    column(3, div(class = "kpi-box",
+                  div(class = "kpi-label", "AVAILABILITY AVG"),
+                  div(class = "kpi-value", 
+                      ifelse(is.na(avail_avg$current), "No data", 
+                             paste0(round(avail_avg$current, 1), "%")))
+    )),
+    column(3, div(class = "kpi-box",
+                  div(class = "kpi-label", "AVAILABILITY LOW"),
+                  div(class = "kpi-value", 
+                      ifelse(is.na(avail_low$current), "No data", 
+                             paste0(round(avail_low$current, 1), "%")))
+    )),
+    column(3, div(class = "kpi-box",
+                  div(class = "kpi-label", "% COMPLETION"),
+                  div(class = "kpi-value", 
+                      ifelse(is.na(compl$current), "No data", 
+                             paste0(round(compl$current, 1), "%")))
+    )),
+    column(3, div(class = "kpi-box",
+                  div(class = "kpi-label", "PU RETENTION"),
+                  div(class = "kpi-value", 
+                      ifelse(is.na(pu_ret$current), "No data", 
+                             paste0(round(pu_ret$current, 1), "%")))
+    ))
+  ),
+  
+  h3("Availability Chart"),
+  plotlyOutput("availability_plot", height = "400px")
+)
+
+# Server
+server <- function(input, output, session) {
+  output$availability_plot <- renderPlotly({
+    
+    avg_data <- long_data %>%
+      filter(metric_name == "Availability Average") %>%
+      arrange(date)
+    
+    if(nrow(avg_data) == 0 || all(is.na(avg_data$value_num))) {
+      p <- ggplot() +
+        annotate("text", x = 0.5, y = 0.5, label = "No data", size = 10, color = "#6c757d") +
+        theme_void()
+      return(ggplotly(p))
+    }
+    
+    p <- ggplot(avg_data, aes(x = date, y = value_num)) +
+      geom_line(color = "#007bff", size = 1.2) +
+      geom_point(color = "#007bff", size = 3) +
+      geom_text(aes(label = paste0(round(value_num, 1), "%")), vjust = -1) +
+      labs(title = "Availability Average", x = "Date", y = "%") +
+      theme_minimal()
+    
+    ggplotly(p)
+  })
+}
+
+# Запуск
+cat("\n🚀 Запуск мінімального dashboard...\n\n")
+shinyApp(ui = ui, server = server)
+```
+

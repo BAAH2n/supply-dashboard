@@ -1,0 +1,10 @@
+"Metric","Previous","Current","Change","Change_Pct"
+"Availability Average",52.06,55.23,3.17,6.09
+"Availability Lowest",38,41,3,7.89
+"%Completion",135,125,-10,-7.41
+"Utilization",38.93,35.28,-3.65,-9.38
+"%Rejects",1,1,0,0
+"CSAT overall",4.5,4.5,0,0
+"CSAT trial",4.3,4.2,-0.1,-2.33
+"FRT",11,11.9,0.9,8.18
+"% Positive reviews",87.8,88.1,0.3,0.34

@@ -1,0 +1,494 @@
+---
+title: "Supply Metrics Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: cosmo
+    css: custom.css
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(plotly)
+library(scales)
+library(DT)
+
+# Припускаємо, що long_data вже завантажена
+# long_data <- readRDS("path/to/long_data.rds")
+
+# Функції для розрахунку змін
+calculate_change <- function(data, metric) {
+  metric_data <- data %>%
+    filter(metric_name == metric) %>%
+    arrange(date)
+  
+  if(nrow(metric_data) < 2) {
+    return(list(current = NA, previous = NA, change = NA, change_pct = NA))
+  }
+  
+  current <- tail(metric_data$value_num, 1)
+  previous <- metric_data$value_num[nrow(metric_data) - 1]
+  change <- current - previous
+  change_pct <- ifelse(previous != 0, (change / previous) * 100, 0)
+  
+  return(list(
+    current = current,
+    previous = previous,
+    change = change,
+    change_pct = change_pct
+  ))
+}
+
+# Розрахунок ключових метрик
+availability_avg <- calculate_change(long_data, "Availability Average")
+availability_low <- calculate_change(long_data, "Availability Lowest")
+completion <- calculate_change(long_data, "%Completion")
+rejects <- calculate_change(long_data, "%Rejects")
+
+# Headcount
+headcount_latest <- long_data %>%
+  filter(metric_name == "Headcount") %>%
+  arrange(desc(date)) %>%
+  slice(1) %>%
+  pull(value_num)
+
+# NDA violations
+nda_latest <- long_data %>%
+  filter(metric_name == "NDA & AI usage abuse") %>%
+  arrange(desc(date)) %>%
+  slice(1) %>%
+  pull(value_raw)
+
+nda_violations <- 0
+if(!is.na(nda_latest) && nda_latest != "N/A") {
+  nda_match <- regmatches(nda_latest, regexec("NDA - ([0-9]+)", nda_latest))
+  if(length(nda_match[[1]]) > 1) {
+    nda_violations <- as.numeric(nda_match[[1]][2])
+  }
+  ai_match <- regmatches(nda_latest, regexec("AI abuse - ([0-9]+)", nda_latest))
+  if(length(ai_match[[1]]) > 1) {
+    nda_violations <- nda_violations + as.numeric(ai_match[[1]][2])
+  }
+}
+```
+
+Рівень 1: Ключові Метрики {data-height=200}
+=====================================
+
+### Availability Average {.value-box}
+
+```{r}
+change_icon <- ifelse(availability_avg$change > 0, "↑", 
+                     ifelse(availability_avg$change < 0, "↓", "→"))
+change_color <- ifelse(availability_avg$change > 0, "success", 
+                      ifelse(availability_avg$change < 0, "danger", "info"))
+
+valueBox(
+  value = paste0(round(availability_avg$current, 1), "%"),
+  caption = paste0("Availability Average ", change_icon, " ", 
+                   abs(round(availability_avg$change_pct, 1)), "%"),
+  icon = "fa-chart-line",
+  color = change_color
+)
+```
+
+### Availability Lowest {.value-box}
+
+```{r}
+change_icon <- ifelse(availability_low$change > 0, "↑", 
+                     ifelse(availability_low$change < 0, "↓", "→"))
+change_color <- ifelse(availability_low$change > 0, "success", 
+                      ifelse(availability_low$change < 0, "danger", "info"))
+
+valueBox(
+  value = paste0(round(availability_low$current, 1), "%"),
+  caption = paste0("Availability Lowest ", change_icon, " ", 
+                   abs(round(availability_low$change_pct, 1)), "%"),
+  icon = "fa-chart-area",
+  color = change_color
+)
+```
+
+### % Completion {.value-box}
+
+```{r}
+change_icon <- ifelse(completion$change > 0, "↑", 
+                     ifelse(completion$change < 0, "↓", "→"))
+change_color <- ifelse(completion$change > 0, "success", 
+                      ifelse(completion$change < 0, "danger", "info"))
+
+valueBox(
+  value = paste0(round(completion$current, 1), "%"),
+  caption = paste0("% Completion ", change_icon, " ", 
+                   abs(round(completion$change_pct, 1)), "%"),
+  icon = "fa-check-circle",
+  color = change_color
+)
+```
+
+### Headcount {.value-box}
+
+```{r}
+valueBox(
+  value = format(headcount_latest, big.mark = " "),
+  caption = "Current Headcount",
+  icon = "fa-users",
+  color = "info"
+)
+```
+
+Рівень 2: Операційні Графіки {data-height=400}
+=====================================
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+### Supply Liquidity (Доступність)
+
+```{r}
+# Підготовка даних
+avg_data <- long_data %>%
+  filter(metric_name == "Availability Average") %>%
+  arrange(date)
+
+lowest_data <- long_data %>%
+  filter(metric_name == "Availability Lowest") %>%
+  arrange(date)
+
+plot_data <- avg_data %>%
+  select(date, avg = value_num) %>%
+  left_join(
+    lowest_data %>% select(date, lowest = value_num),
+    by = "date"
+  )
+
+# Створення графіку
+p <- ggplot(plot_data, aes(x = date)) +
+  # Зона ризику (< 35%)
+  annotate("rect", 
+           xmin = -Inf, xmax = Inf, 
+           ymin = 0, ymax = 35,
+           fill = "#dc3545", alpha = 0.15) +
+  annotate("text",
+           x = plot_data$date[1],
+           y = 32,
+           label = "Risk Zone (<35%)",
+           hjust = 0,
+           color = "#dc3545",
+           size = 3) +
+  # Ribbon між Average та Lowest
+  geom_ribbon(aes(ymin = lowest, ymax = avg), 
+              fill = "#007bff", alpha = 0.25) +
+  # Лінія Average (жирна)
+  geom_line(aes(y = avg, text = paste0("Дата: ", date, "<br>Average: ", round(avg, 2), "%")), 
+            color = "#007bff", linewidth = 1.2) +
+  geom_point(aes(y = avg, text = paste0("Дата: ", date, "<br>Average: ", round(avg, 2), "%")), 
+             color = "#007bff", size = 3) +
+  # Лінія Lowest (пунктирна)
+  geom_line(aes(y = lowest, text = paste0("Дата: ", date, "<br>Lowest: ", round(lowest, 2), "%")), 
+            color = "#0056b3", linetype = "dashed", linewidth = 1) +
+  geom_point(aes(y = lowest, text = paste0("Дата: ", date, "<br>Lowest: ", round(lowest, 2), "%")), 
+             color = "#0056b3", size = 2) +
+  # Підписи значень
+  geom_text(aes(y = avg, label = paste0(round(avg, 1), "%")), 
+            vjust = -0.8, size = 3.5, fontface = "bold") +
+  geom_text(aes(y = lowest, label = paste0(round(lowest, 1), "%")), 
+            vjust = 1.5, size = 3, color = "#0056b3") +
+  labs(x = "Період", y = "Availability (%)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10))
+
+ggplotly(p, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Utilization
+
+```{r}
+util_data <- long_data %>%
+  filter(metric_name == "Utilization") %>%
+  arrange(date)
+
+target <- util_data$target_num[1]
+
+p <- ggplot(util_data, aes(x = date)) +
+  # Target line
+  geom_hline(yintercept = target, 
+             linetype = "dashed", 
+             color = "#6c757d", 
+             linewidth = 1) +
+  annotate("text", 
+           x = util_data$date[1], 
+           y = target + 2, 
+           label = paste0("Target: ", target, "%"),
+           hjust = 0, color = "#6c757d", size = 3.5) +
+  # Фактична лінія
+  geom_line(aes(y = value_num, text = paste0("Дата: ", date, "<br>Utilization: ", round(value_num, 2), "%<br>Target: ", target, "%")), 
+            color = "#28a745", linewidth = 1.2) +
+  geom_point(aes(y = value_num, text = paste0("Дата: ", date, "<br>Utilization: ", round(value_num, 2), "%<br>Target: ", target, "%")), 
+             color = "#28a745", size = 3) +
+  # Підписи значень
+  geom_text(aes(y = value_num, label = paste0(round(value_num, 1), "%")), 
+            vjust = -1, size = 3.5, fontface = "bold") +
+  labs(x = "Період", y = "Utilization (%)") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 60), breaks = seq(0, 60, 10))
+
+ggplotly(p, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+Column {data-width=200}
+-----------------------------------------------------------------------
+
+### % Rejects {.gauge}
+
+```{r}
+gauge(round(rejects$current, 2), 
+      min = 0, 
+      max = 5, 
+      symbol = '%',
+      sectors = gaugeSectors(
+        success = c(0, 1),
+        warning = c(1, 2),
+        danger = c(2, 5)
+      ))
+```
+
+### Status
+
+```{r}
+status_text <- ifelse(rejects$current <= 1.0, "OK", "ALERT")
+status_color <- ifelse(rejects$current <= 1.0, "success", "danger")
+
+valueBox(
+  value = status_text,
+  caption = paste0("Rejects: ", round(rejects$current, 2), "%"),
+  icon = ifelse(rejects$current <= 1.0, "fa-check", "fa-exclamation-triangle"),
+  color = status_color
+)
+```
+
+Рівень 3: Якість та Бізнес-метрики {data-height=400}
+=====================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### CSAT Metrics
+
+```{r}
+csat_data <- long_data %>%
+  filter(metric_name %in% c("CSAT overall", "CSAT trial")) %>%
+  arrange(date, metric_name)
+
+target_overall <- csat_data %>% 
+  filter(metric_name == "CSAT overall") %>% 
+  pull(target_num) %>% 
+  first()
+
+target_trial <- csat_data %>% 
+  filter(metric_name == "CSAT trial") %>% 
+  pull(target_num) %>% 
+  first()
+
+p <- ggplot(csat_data, aes(x = date, y = value_num, 
+                            color = metric_name, 
+                            group = metric_name)) +
+  # Target lines
+  geom_hline(yintercept = target_overall, 
+             linetype = "dashed", 
+             color = "#007bff", 
+             alpha = 0.5) +
+  geom_hline(yintercept = target_trial, 
+             linetype = "dashed", 
+             color = "#17a2b8", 
+             alpha = 0.5) +
+  # Actual lines
+  geom_line(aes(text = paste0("Дата: ", date, 
+                               "<br>", metric_name, ": ", round(value_num, 2),
+                               "<br>Target: ", target_num)), 
+            linewidth = 1.2) +
+  geom_point(aes(text = paste0("Дата: ", date, 
+                                "<br>", metric_name, ": ", round(value_num, 2),
+                                "<br>Target: ", target_num)), 
+             size = 3) +
+  # Підписи
+  geom_text(aes(label = round(value_num, 2)), 
+            vjust = -1, size = 3, show.legend = FALSE) +
+  labs(x = "Період", y = "CSAT Score", color = "Метрика") +
+  scale_color_manual(values = c("CSAT overall" = "#007bff", 
+                                 "CSAT trial" = "#17a2b8")) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 5), breaks = seq(0, 5, 0.5))
+
+ggplotly(p, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+### First Response Time (FRT)
+
+```{r}
+frt_data <- long_data %>%
+  filter(metric_name == "FRT") %>%
+  arrange(date)
+
+target <- frt_data$target_num[1]
+
+p <- ggplot(frt_data, aes(x = date)) +
+  # Target line
+  geom_hline(yintercept = target, 
+             linetype = "dashed", 
+             color = "#6c757d", 
+             linewidth = 1) +
+  annotate("text", 
+           x = frt_data$date[1], 
+           y = target + 0.5, 
+           label = paste0("Target: ", target, " хв"),
+           hjust = 0, color = "#6c757d", size = 3.5) +
+  # Actual line
+  geom_line(aes(y = value_num, text = paste0("Дата: ", date, "<br>FRT: ", round(value_num, 2), " хв<br>Target: ", target, " хв")), 
+            color = "#ff6b6b", linewidth = 1.2) +
+  geom_point(aes(y = value_num, text = paste0("Дата: ", date, "<br>FRT: ", round(value_num, 2), " хв<br>Target: ", target, " хв")), 
+             color = "#ff6b6b", size = 3) +
+  geom_text(aes(y = value_num, label = round(value_num, 1)), 
+            vjust = -1, size = 3.5, fontface = "bold") +
+  labs(x = "Період", y = "FRT (хвилини)") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  )
+
+ggplotly(p, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### % Positive Reviews
+
+```{r}
+reviews_data <- long_data %>%
+  filter(metric_name == "% Positive reviews") %>%
+  arrange(date)
+
+target <- reviews_data$target_num[1]
+
+p <- ggplot(reviews_data, aes(x = date)) +
+  geom_hline(yintercept = target, 
+             linetype = "dashed", 
+             color = "#6c757d", 
+             linewidth = 1) +
+  annotate("text", 
+           x = reviews_data$date[1], 
+           y = target - 2, 
+           label = paste0("Target: ", target, "%"),
+           hjust = 0, color = "#6c757d", size = 3.5) +
+  geom_line(aes(y = value_num, text = paste0("Дата: ", date, "<br>Positive Reviews: ", round(value_num, 2), "%")), 
+            color = "#28a745", linewidth = 1.2) +
+  geom_point(aes(y = value_num, text = paste0("Дата: ", date, "<br>Positive Reviews: ", round(value_num, 2), "%")), 
+             color = "#28a745", size = 3) +
+  geom_text(aes(y = value_num, label = paste0(round(value_num, 1), "%")), 
+            vjust = -1, size = 3.5, fontface = "bold") +
+  labs(x = "Період", y = "Percentage (%)") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(70, 100), breaks = seq(70, 100, 5))
+
+ggplotly(p, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+### Communication Metrics
+
+```{r}
+comm_data <- long_data %>%
+  filter(metric_name %in% c("Pings coverage", "Messenger answer rate", "Engagement messages coverage")) %>%
+  arrange(date)
+
+p <- ggplot(comm_data, aes(x = date, y = value_num, fill = metric_name)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  # Target lines
+  geom_hline(data = comm_data %>% 
+               group_by(metric_name) %>% 
+               summarise(target = first(target_num)),
+             aes(yintercept = target, color = metric_name),
+             linetype = "dashed", linewidth = 0.8, show.legend = FALSE) +
+  geom_text(aes(label = paste0(round(value_num, 1), "%")), 
+            position = position_dodge(width = 0.7),
+            vjust = -0.5, size = 3) +
+  labs(x = "Період", y = "Percentage (%)", fill = "Метрика") +
+  scale_fill_manual(values = c("Pings coverage" = "#ffc107",
+                                "Messenger answer rate" = "#28a745",
+                                "Engagement messages coverage" = "#17a2b8")) +
+  scale_color_manual(values = c("Pings coverage" = "#ffc107",
+                                 "Messenger answer rate" = "#28a745",
+                                 "Engagement messages coverage" = "#17a2b8")) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10))
+
+ggplotly(p) %>%
+  layout(hovermode = "x unified")
+```
+
+Risk Alerts {data-height=100}
+=====================================
+
+### NDA & AI Usage Violations {.value-box}
+
+```{r}
+alert_color <- ifelse(nda_violations > 0, "danger", "success")
+alert_icon <- ifelse(nda_violations > 0, "fa-exclamation-triangle", "fa-check-circle")
+alert_text <- ifelse(nda_violations > 0, 
+                     paste0("⚠️ ", nda_violations, " Violations"),
+                     "✓ No Violations")
+
+valueBox(
+  value = alert_text,
+  caption = "NDA & AI Usage Abuse Status",
+  icon = alert_icon,
+  color = alert_color
+)
+```
+
+### Last Update
+
+```{r}
+valueBox(
+  value = format(Sys.Date(), "%d.%m.%Y"),
+  caption = "Dashboard Last Updated",
+  icon = "fa-calendar",
+  color = "info"
+)
+```
