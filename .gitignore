@@ -11,6 +11,10 @@ env/
 __pycache__/
 .env
 
+# Google Sheets auth tokens
+.secrets/
+.httr-oauth
+
 # IDE
 .vscode/
 .idea/
