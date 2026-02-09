@@ -28,69 +28,45 @@ cat("✅ Всі необхідні пакети завантажено!\n\n")
 ```
 
 ```{r}
-#| label: google_auth
-#| echo: false
+#| label: load&transform_data
 #| warning: false
 #| message: false
 
 # ===============================================
-# 🔐 GOOGLE SHEETS AUTHENTICATION
+# 📊 ЗАВАНТАЖЕННЯ ТА ОБРОБКА ДАНИХ
 # ===============================================
-cat("🔐 Налаштування автентифікації Google Sheets...\n")
+# ⚠️ ВАЖЛИВО ДЛЯ ПЕРШОГО ЗАПУСКУ:
+# Якщо це перший раз, запустіть цей chunk ОКРЕМО в R Console (Ctrl+Enter в RStudio)
+# Відкриється браузер для авторизації Google Sheets
+# Після авторизації токени збережуться і можна буде робити quarto render
 
-# Перевірка наявності service account ключа
-service_account_file <- "service-account.json"
+cat("📥 Завантаження даних з Google Sheets...\n")
 
-if (file.exists(service_account_file)) {
-  # Використовуємо service account (для headless середовищ)
-  cat("🔑 Використання Service Account з файлу:", service_account_file, "\n")
-  googlesheets4::gs4_auth(path = service_account_file)
-  cat("✅ Авторизовано через Service Account\n\n")
-} else if (dir.exists(".secrets") && length(list.files(".secrets", pattern = "*.rds")) > 0) {
-  # Використовуємо збережені OAuth токени
-  cat("🔑 Використання збережених OAuth токенів\n")
-  tryCatch({
-    googlesheets4::gs4_auth(cache = ".secrets", email = TRUE)
-    cat("✅ Авторизовано через OAuth\n\n")
-  }, error = function(e) {
-    cat("⚠️  Помилка OAuth, перехід на публічний режим\n")
-    googlesheets4::gs4_deauth()
-  })
-} else {
-  # Non-authenticated режим (для публічних таблиць)
-  cat("ℹ️  Публічний режим (non-authenticated)\n")
-  cat("   ✓ Працює для публічних таблиць\n")
-  cat("   ✗ Для приватних таблиць потрібно:\n")
-  cat("     • Service Account (service-account.json)\n")
-  cat("     • АБО зробити таблицю публічною\n\n")
-  googlesheets4::gs4_deauth()
-  cat("✅ Готово до читання публічних таблиць\n\n")
-}
-```
-
-```{r}
-#| label: load&transform_data
-#| warning: false
-#|
 url <- "https://docs.google.com/spreadsheets/d/1DWcT_Qs3a71Um4I--zvMtkl1CnVuHmW05JlYs-WwS8c/edit?gid=0#gid=0"
 data <- googlesheets4::read_sheet(url, col_types = "c")
 
-long_data <- data %>% 
-  select(-Owner) %>% 
+cat("✅ Дані завантажено!\n")
+cat("🔄 Трансформація даних...\n")
+
+long_data <- data %>%
+  select(-Owner) %>%
   select(where(~!all(is.na(.)))) %>%
   rename(metric_name = "Metrics/ Date") %>%
-  rename(target_raw = Target) %>% 
+  rename(target_raw = Target) %>%
   pivot_longer(
     cols = -c(metric_name, target_raw),
-    names_to = "date",  
-    values_to = "value_raw" 
+    names_to = "date",
+    values_to = "value_raw"
   ) %>%
   mutate(
     value_raw = str_replace(value_raw, ",", "."),
     target_num = parse_number(target_raw),
     value_num = parse_number(value_raw)
-  ) %>% 
+  ) %>%
   select(-target_raw)
+
+cat("✅ Дані трансформовано!\n\n")
+```
 ```
 
 ```{r}
