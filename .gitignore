@@ -14,6 +14,7 @@ __pycache__/
 # Google Sheets auth tokens
 .secrets/
 .httr-oauth
+service-account.json
 
 # IDE
 .vscode/
