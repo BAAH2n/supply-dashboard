@@ -2,3 +2,18 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Python
+Dashboard/
+venv/
+env/
+*.pyc
+__pycache__/
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

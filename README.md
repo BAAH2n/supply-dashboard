@@ -146,6 +146,8 @@ install.packages(c(
 
 ### Крок 3: Налаштування Python віртуального середовища
 
+**⚠️ ВАЖЛИВО**: Віртуальне середовище НЕ включене в репозиторій (і не повинно бути), оскільки воно містить платформо-специфічні файли. Кожен користувач створює своє власне середовище.
+
 ```bash
 # Створення віртуального середовища
 python3 -m venv Dashboard
@@ -156,22 +158,13 @@ source Dashboard/bin/activate
 # Windows:
 Dashboard\Scripts\activate
 
-# Встановлення залежностей
-pip install python-dotenv slack-sdk
-```
-
-### Крок 4: Створення файлу залежностей (опціонально)
-
-Для відтворення середовища створіть `requirements.txt`:
-
-```bash
-pip freeze > requirements.txt
-```
-
-Потім для встановлення на іншій машині:
-```bash
+# Встановлення залежностей з requirements.txt
 pip install -r requirements.txt
 ```
+
+**Що знаходиться в requirements.txt**:
+- `python-dotenv` - для завантаження змінних середовища з .env
+- `slack-sdk` - для інтеграції зі Slack API
 
 ---
 
@@ -306,13 +299,23 @@ supply-dashboard/
 
 ## Troubleshooting
 
-### Проблема: "No module named 'dotenv'"
+### Проблема: "No module named 'dotenv'" або інші Python модулі не знайдено
 
 **Рішення**:
 ```bash
-source Dashboard/bin/activate
-pip install python-dotenv
+# Переконайтеся, що віртуальне середовище активовано
+source Dashboard/bin/activate  # Linux/macOS
+# або
+Dashboard\Scripts\activate  # Windows
+
+# Встановіть залежності з requirements.txt
+pip install -r requirements.txt
 ```
+
+**Якщо віртуальне середовище не працює**:
+- Видаліть старе середовище: `rm -rf Dashboard/`
+- Створіть нове: `python3 -m venv Dashboard`
+- Активуйте та встановіть залежності: `source Dashboard/bin/activate && pip install -r requirements.txt`
 
 ### Проблема: "Error: Slack token not found"
 
