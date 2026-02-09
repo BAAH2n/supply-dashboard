@@ -4,14 +4,27 @@ format: html
 ---
 
 ```{r}
-#| label: load_libraries
+#| label: auto_install_packages
 #| echo: false
 #| warning: false
+#| message: false
 
-library(shiny)
-library(ggplot2)
-library(scales)
-library(tidyverse)
+# ===============================================
+# 📦 AUTO-INSTALL REQUIRED PACKAGES
+# ===============================================
+cat("🔍 Перевірка необхідних пакетів...\n")
+
+required_packages <- c("shiny", "ggplot2", "scales", "tidyverse", "googlesheets4")
+
+for (package in required_packages) {
+  if (!require(package, character.only = TRUE, quietly = TRUE)) {
+    cat(paste("📥 Встановлення пакету:", package, "\n"))
+    install.packages(package, repos = "https://cran.rstudio.com/")
+    library(package, character.only = TRUE)
+  }
+}
+
+cat("✅ Всі необхідні пакети завантажено!\n\n")
 ```
 
 ```{r}
