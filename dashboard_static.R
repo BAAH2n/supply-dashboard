@@ -5,11 +5,22 @@
 # 2. Configure settings below
 # 3. Run: source("dashboard_config.R")
 
-library(shiny)
-library(ggplot2)
-library(dplyr)
-library(scales)
-library(tidyr)
+# ===============================================
+# 📦 AUTO-INSTALL REQUIRED PACKAGES
+# ===============================================
+cat("🔍 Перевірка необхідних пакетів...\n")
+
+required_packages <- c("shiny", "ggplot2", "dplyr", "scales", "tidyr")
+
+for (package in required_packages) {
+  if (!require(package, character.only = TRUE, quietly = TRUE)) {
+    cat(paste("📥 Встановлення пакету:", package, "\n"))
+    install.packages(package, repos = "https://cran.rstudio.com/")
+    library(package, character.only = TRUE)
+  }
+}
+
+cat("✅ Всі необхідні пакети завантажено!\n\n")
 
 # ===============================================
 # ⚙️ SETTINGS BLOCK - CONFIGURE HERE
