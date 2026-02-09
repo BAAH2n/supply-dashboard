@@ -28,9 +28,30 @@ cat("✅ Всі необхідні пакети завантажено!\n\n")
 ```
 
 ```{r}
+#| label: google_auth
+#| echo: false
+#| warning: false
+#| message: false
+
+# ===============================================
+# 🔐 GOOGLE SHEETS AUTHENTICATION
+# ===============================================
+cat("🔐 Налаштування автентифікації Google Sheets...\n")
+
+# Автентифікація через браузер (інтерактивна)
+# При першому запуску відкриється браузер для авторизації
+googlesheets4::gs4_auth(
+  email = TRUE,  # Дозволить вибрати email
+  cache = ".secrets"  # Зберігає токени в папці .secrets
+)
+
+cat("✅ Автентифікація успішна!\n\n")
+```
+
+```{r}
 #| label: load&transform_data
 #| warning: false
-#| 
+#|
 url <- "https://docs.google.com/spreadsheets/d/1DWcT_Qs3a71Um4I--zvMtkl1CnVuHmW05JlYs-WwS8c/edit?gid=0#gid=0"
 data <- googlesheets4::read_sheet(url, col_types = "c")
 
